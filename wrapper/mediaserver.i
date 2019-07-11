@@ -18,6 +18,10 @@
 #include "../include/media-server/include/mp4streamer.h"
 #include "../include/media-server/include/rtp/RTPStreamTransponder.h"
 #include "../include/media-server/include/ActiveSpeakerDetector.h"
+#include "../inlucde/media-server/include/MediaFrameListenerBridge.h"
+#include "../include/media-server/include/EventLoop.h"
+
+
 
 using RTPBundleTransportConnection = RTPBundleTransport::Connection;
 
@@ -302,6 +306,136 @@ private:
 
 
 
+class MediaFrameStream : 
+	public RTPReceiver
+{
+public:
+	MediaFrameStream():
+		audioBridge(1),
+		videoBridge(2),
+		audioSource(1, loop),
+		videoSource(2, loop),
+		mutex(true)
+	{
+		
+		loop.Start(-1);
+
+		audioBridge.AddListener(&audioSource);
+		videoBridge.AddListener(&videoSource);
+
+		dispatch = loop.CreateTimer([this](std::chrono::milliseconds now){
+
+			//Iterate over the enqueued packets
+			for(auto it = queue.begin(); it!=queue.end(); it = queue.erase(it)) 
+			{
+
+				auto ts = std::chrono::milliseconds(it->first);
+				auto& frame = it->second;
+				
+				if (ts > now)
+				{
+					//Log("-ReDispatching in %llums size=%d\n",(ts-now).count());
+					//Schedule timer for later
+					dispatch->Again(ts-now);
+					//Done
+					break;
+				}
+
+				if (frame->GetType()==MediaFrame::Audio)
+					// Dispatch audio
+					audioBridge.onMediaFrame(*frame);
+				else
+					//Dispatch video
+					videoBridge.onMediaFrame(*frame);
+			}
+		});
+	}
+
+	virtual ~MediaFrameStream()
+	{
+		Stop();
+	}
+
+	void onMediaFrame(MediaFrame* frame)
+	{
+
+		uint64_t now = getTimeMS();
+		
+		loop.Async([=](...){
+
+			if (!first)
+			{
+				first = frame->GetTimeStamp();
+				ini = now;
+			}
+
+			auto sched = ini + (frame->GetTimeStamp() - first);
+
+			if (sched < now)
+			{
+
+				first = frame->GetTimeStamp();
+				ini = now;
+				sched = now;
+			}
+
+			queue.emplace(sched,frame);
+
+			if (queue.size()==1) {
+				dispatch->Again(std::chrono::milliseconds(sched > now ? sched - now : 0));
+			}
+
+		});
+	}
+
+	void Stop()
+	{
+
+		audioBridge.RemoveListener(&audioSource);
+		videoBridge.RemoveListener(&videoSource);
+
+		dispatch->Cancel();
+
+		loop.Stop();
+	}
+
+	RTPIncomingSourceGroup* GetAudioIncomingSourceGroup()
+	{
+		return &audioSource;
+	}
+
+	RTPIncomingSourceGroup* GetVideoIncomingSourceGroup()
+	{
+		return &videoSource;
+	}
+
+	int End() 
+	{
+		Log("RawRTPSessionFacade End\n");
+		return 1;
+	}
+
+	virtual int SendPLI(DWORD ssrc) {
+		return 1;
+	}
+
+private:
+	RTPIncomingSourceGroup audioSource;
+	RTPIncomingSourceGroup videoSource;
+
+	MediaFrameListenerBridge audioBridge;
+	MediaFrameListenerBridge videoBridge;
+
+	std::multimap<uint64_t,std::unique_ptr<MediaFrame>> queue;
+	EventLoop loop;
+	Timer::shared dispatch;
+
+	uint64_t first = 0;
+	uint64_t ini = 0;
+}
+
+
+
 class RawRTPSessionFacade :
 	public RTPReceiver
 {
@@ -309,6 +443,8 @@ public:
 	RawRTPSessionFacade(MediaFrame::Type media):
 	source(media,loop)
 	{
+
+		loop.Start(-1);
 		source.Start();
 		mediatype = media;
 	}
@@ -447,7 +583,7 @@ public:
 		return 1;
 	}
 	virtual int SendPLI(DWORD ssrc) {
-		return 0;
+		return 1;
 	}
 private:
 	RTPMap extMap;
@@ -1130,6 +1266,26 @@ struct RTPIncomingSourceGroup : public RTPIncomingMediaStream
 
 	void Update();
 };
+
+
+%nodefaultctor MediaFrameListenerBridge;
+struct MediaFrameListenerBridge : public RTPIncomingMediaStream
+{
+	void AddListener(RTPIncomingMediaStreamListener* listener);
+	void RemoveListener(RTPIncomingMediaStreamListener* listener);
+};
+
+
+class MediaFrameStream 
+{
+public:
+	MediaFrameStream();
+	RTPIncomingSourceGroup* GetAudioIncomingSourceGroup();
+	RTPIncomingSourceGroup* GetVideoIncomingSourceGroup();
+	RTPReceiver*		GetReceiver();
+	void Stop();
+}
+
 
 
 struct RTPIncomingMediaStreamMultiplexer :  public RTPIncomingMediaStreamListener,public RTPIncomingMediaStream
