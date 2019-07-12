@@ -1,8 +1,5 @@
 package packetizer
 
-var startcode3 = []byte{0, 0, 1}
-var startcode4 = []byte{0, 0, 0, 1}
-
 type H264Packetier struct{}
 
 func (p *H264Packetier) Packetize(payload []byte, mtu int) (payloads [][]byte) {

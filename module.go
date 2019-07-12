@@ -5,21 +5,26 @@ import (
 )
 
 func init() {
+	native.MediaServerEnableLog(false)
 	native.MediaServerInitialize()
 }
 
+// EnableLog log or not
 func EnableLog(flag bool) {
 	native.MediaServerEnableLog(flag)
 }
 
+// EnableDebug debug or not
 func EnableDebug(flag bool) {
 	native.MediaServerEnableDebug(flag)
 }
 
-func SetPortRange(minPort, maxPort int) bool {
-	return native.MediaServerSetPortRange(minPort, maxPort)
-}
-
+// EnableUltraDebug ultra debug
 func EnableUltraDebug(flag bool) {
 	native.MediaServerEnableUltraDebug(flag)
+}
+
+// SetPortRange set min max port
+func SetPortRange(minPort, maxPort int) bool {
+	return native.MediaServerSetPortRange(minPort, maxPort)
 }

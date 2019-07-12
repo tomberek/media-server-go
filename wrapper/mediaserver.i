@@ -411,7 +411,7 @@ public:
 
 	int End() 
 	{
-		Log("RawRTPSessionFacade End\n");
+		Log("MediaFrameStream End\n");
 		return 1;
 	}
 
@@ -436,11 +436,11 @@ private:
 
 
 
-class RawRTPSessionFacade :
+class MediaFrameSessionFacade :
 	public RTPReceiver
 {
 public:
-	RawRTPSessionFacade(MediaFrame::Type media):
+	MediaFrameSessionFacade(MediaFrame::Type media):
 	source(media,loop)
 	{
 
@@ -479,17 +479,14 @@ public:
 			//ADD it
 			rtp[type] = codec;
 		}
-	
-		//Set local 
-		//RTPSession::SetSendingRTPMap(rtp,apt);
-		//RTPSession::SetReceivingRTPMap(rtp,apt);
 
 		return 1;
 	}
+
 	void onRTPPacket(uint8_t* data, int size) 
 	{
 		
-		Log("RawRTPSessionFacade  onRTPPacket\n");
+		Log("MediaFrameSessionFacade  onRTPPacket\n");
 
 		RTPHeader header;
 		RTPHeaderExtension extension;
@@ -499,7 +496,7 @@ public:
 		if (!ini)
 		{
 			//Debug
-			Debug("-RawRTPSessionFacade::onRTPPacket() | Could not parse RTP header\n");
+			Debug("-MediaFrameSessionFacade::onRTPPacket() | Could not parse RTP header\n");
 			return;
 		}
 
@@ -512,7 +509,7 @@ public:
 			if (!l)
 			{
 				///Debug
-				Debug("-RawRTPSessionFacade::onRTPPacket() | Could not parse RTP header extension\n");
+				Debug("-MediaFrameSessionFacade::onRTPPacket() | Could not parse RTP header extension\n");
 				//Exit
 				return;
 			}
@@ -528,7 +525,7 @@ public:
 			if (size-ini<padding)
 			{
 				///Debug
-				Debug("-RawRTPSessionFacade::onRTPPacket() | RTP padding is bigger than size\n");
+				Debug("-MediaFrameSessionFacade::onRTPPacket() | RTP padding is bigger than size\n");
 				return;
 			}
 			//Remove from size
@@ -544,7 +541,7 @@ public:
 		if (codec==RTPMap::NotFound)
 		{
 			//Exit
-			Error("-RawRTPSessionFacade::onRTPPacket(%s) | RTP packet type unknown [%d]\n",MediaFrame::TypeToString(mediatype),type);
+			Error("-MediaFrameSessionFacade::onRTPPacket(%s) | RTP packet type unknown [%d]\n",MediaFrame::TypeToString(mediatype),type);
 			//Exit
 			return;
 		}
@@ -570,7 +567,7 @@ public:
 		packet->SetSSRC(source.media.ssrc);
 		source.AddPacket(packet->Clone(),0);
 		
-		Debug("-RawRTPSessionFacade::onRTPPacket() | Seq Num = %d\n", packet->GetSeqNum());
+		Debug("-MediaFrameSessionFacade::onRTPPacket() | Seq Num = %d\n", packet->GetSeqNum());
 
 	}
 	RTPIncomingSourceGroup* GetIncomingSourceGroup()
@@ -579,7 +576,7 @@ public:
 	}
 	int End() 
 	{
-		Log("RawRTPSessionFacade End\n");
+		Log("MediaFrameSessionFacade End\n");
 		return 1;
 	}
 	virtual int SendPLI(DWORD ssrc) {
@@ -672,7 +669,7 @@ RTPReceiverFacade* SessionToReceiver(RTPSessionFacade* session)
 	return new RTPReceiverFacade(session);
 }
 
-RTPReceiverFacade* RTPSessionToReceiver(RawRTPSessionFacade* session)
+RTPReceiverFacade* RTPSessionToReceiver(MediaFrameSessionFacade* session)
 {
 	return new RTPReceiverFacade(session);
 }
@@ -1473,7 +1470,7 @@ RTPReceiverFacade*	TransportToReceiver(DTLSICETransport* transport);
 RTPReceiverFacade*	PCAPTransportEmulatorToReceiver(PCAPTransportEmulator* transport);
 RTPSenderFacade*	SessionToSender(RTPSessionFacade* session);
 RTPReceiverFacade*	SessionToReceiver(RTPSessionFacade* session);
-RTPReceiverFacade*  RTPSessionToReceiver(RawRTPSessionFacade* session);
+RTPReceiverFacade*  RTPSessionToReceiver(MediaFrameSessionFacade* session);
 
 
 class RTPStreamTransponderFacade 
