@@ -57,6 +57,7 @@ func (s *MediaFrameSession) Push(rtp []byte) {
 	if rtp == nil || len(rtp) == 0 {
 		return
 	}
+	fmt.Println("push buffer 22222", len(rtp))
 	s.session.OnRTPPacket(&rtp[0], len(rtp))
 }
 

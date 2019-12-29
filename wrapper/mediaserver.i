@@ -334,9 +334,11 @@ public:
 			{
 				case MediaFrame::Audio:
 					codec = (BYTE)AudioCodec::GetCodecForName(it->GetProperty("codec"));
+					audioCodec = codec;
 					break;
 				case MediaFrame::Video:
 					codec = (BYTE)VideoCodec::GetCodecForName(it->GetProperty("codec"));
+					videoCodec = codec;
 					break;
 				default:
 					///Ignore
@@ -355,15 +357,15 @@ public:
 
 	void onRTPPacket(uint8_t* data, int size) 
 	{
-		
+
 		Log("MediaFrameSessionFacade  onRTPPacket\n");
 
 		RTPHeader header;
 		RTPHeaderExtension extension;
 
-		int ini = header.Parse(data,size);
+		int len = header.Parse(data,size);
 
-		if (!ini)
+		if (!len)
 		{
 			//Debug
 			Debug("-MediaFrameSessionFacade::onRTPPacket() | Could not parse RTP header\n");
@@ -374,7 +376,7 @@ public:
 		{
 			
 			//Parse extension
-			int l = extension.Parse(extMap,data+ini,size-ini);
+			int l = extension.Parse(extMap,data+len,size-len);
 			//If not parsed
 			if (!l)
 			{
@@ -384,7 +386,7 @@ public:
 				return;
 			}
 			//Inc ini
-			ini += l;
+			len += l;
 		}
 
 		if (header.padding)
@@ -392,15 +394,17 @@ public:
 			//Get last 2 bytes
 			WORD padding = get1(data,size-1);
 			//Ensure we have enought size
-			if (size-ini<padding)
+			if (size-len<padding)
 			{
 				///Debug
-				Debug("-MediaFrameSessionFacade::onRTPPacket() | RTP padding is bigger than size\n");
+				Debug("-PCAPTransportEmulator::Run() | RTP padding is bigger than size [padding:%u,size%u]\n",padding,size);
+				//Ignore this try again
 				return;
 			}
 			//Remove from size
 			size -= padding;
 		}
+
 
 		DWORD ssrc = header.ssrc;
 		BYTE type  = header.payloadType;
@@ -416,17 +420,15 @@ public:
 			return;
 		}
 
+
 		auto packet = std::make_shared<RTPPacket>(mediatype,codec,header,extension);
 
 		//Set the payload
-		packet->SetPayload(data+ini,size-ini);
-		
-		//Get sec number
+		packet->SetPayload(data+len,size-len);
+
 		WORD seq = packet->GetSeqNum();
 
-		WORD cycles = source.media.SetSeqNum(seq);
-
-		packet->SetSeqCycles(cycles);
+		source.media.SetSeqNum(seq);
 
 		if (source.media.ssrc != ssrc) {
 			source.media.Reset();
@@ -434,12 +436,21 @@ public:
 		}
 
 		source.media.Update(getTimeMS(),packet->GetSeqNum(),packet->GetRTPHeader().GetSize()+packet->GetMediaLength());
-		packet->SetSSRC(source.media.ssrc);
-		source.AddPacket(packet->Clone(),0);
-		
+
+		packet->Dump();
+
+		source.AddPacket(packet,0);
+
 		Debug("-MediaFrameSessionFacade::onRTPPacket() | Seq Num = %d\n", packet->GetSeqNum());
 
+
 	}
+
+	void onRTPData(uint8_t* data, int size, uint32_t timestamp)
+	{
+
+	}
+
 	RTPIncomingSourceGroup* GetIncomingSourceGroup()
 	{
 		return &source;
@@ -452,10 +463,17 @@ public:
 	virtual int SendPLI(DWORD ssrc) {
 		return 1;
 	}
+
 private:
 	RTPMap extMap;
 	RTPMap rtp;
 	RTPMap apt;
+	BYTE audioCodec;
+	BYTE videoCodec;
+
+	DWORD ssrc = 0;
+	DWORD extSeqNum = 0;
+
 	MediaFrame::Type mediatype;
 	EventLoop loop;
 	RTPIncomingSourceGroup source;
@@ -1403,6 +1421,7 @@ public:
 	MediaFrameSessionFacade(MediaFrame::Type media);
 	int Init(const Properties &properties);
 	void onRTPPacket(uint8_t* buffer, int len);
+	void onRTPData(uint8_t* buffer, int size, uint8_t payloadType);
 	RTPIncomingSourceGroup* GetIncomingSourceGroup();
 	int End();
 	virtual int SendPLI(DWORD ssrc);
