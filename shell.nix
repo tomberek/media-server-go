@@ -1,5 +1,5 @@
 let 
-  pkgs = import /home/tom/rdpkgs {};
+  pkgs = import <nixpkgs>{};
   src = pkgs.fetchgit {
     fetchSubmodules = true;
     url = "https://github.com/notedit/media-server-go-native.git";
