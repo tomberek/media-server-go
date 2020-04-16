@@ -1,0 +1,190 @@
+<!doctype html>
+<html>
+<head>
+<meta http-equiv='Content-Type' content='text/html; charset=UTF-8'>
+<title> webrtc test  </title>
+<link rel="stylesheet" type="text/css" href="drag.css">
+<style type="text/css">
+	.room {
+		cursor: pointer;
+	}
+	div.select {
+      display: inline-block;
+      margin: 0 0 1em 0;
+    }
+    video {
+        max-width: 320;
+        width: 100%;
+        height: auto;
+    }
+</style>
+
+<script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+<script src="https://cdn.bootcss.com/hls.js/0.10.1/hls.min.js"></script>
+
+<script type='text/javascript'>
+    window.localStorage.setItem('debug', '*');
+    var socket;
+    function addVideoForStream(stream,muted)
+    {
+        const video = document.getElementById("videoIn");
+        video.width = 320;
+        video.height = 240;
+        video.srcObject = stream;
+        video.autoplay = true;
+        video.muted = muted;
+    }
+    function removeVideoForStream(stream)
+    {
+        var video = document.getElementById(stream.id);
+        //Remove it when done
+        video.addEventListener('webkitTransitionEnd',function(){
+            alert("panic on webkitTransitionEnd")
+                //Delete it
+            video.parentElement.removeChild(video);
+        });
+        //Disable it first
+        video.className = "disabled";
+    }
+
+    function playHLS() {
+        const video = document.getElementById("videoHLS");
+        //Set same id
+        video.width = 320;
+        video.height = 240;
+        video.controls = true;
+
+
+        var hls = new Hls();
+        hls.loadSource('http://localhost:8000/playlist.m3u8');
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED,function() {
+            video.play();
+        });
+    }
+    function connect() 
+    {
+        var pc = new RTCPeerConnection({
+            //bundlePolicy: "max-bundle",
+            //rtcpMuxPolicy : "require"
+        });
+        
+        
+        pc.onremovestream = function(event) {
+            console.debug("pc::onRemoveStream",event);
+            //Play it
+            removeVideoForStream(event.stream);
+        };
+        pc.ontrack = function (event) {
+          console.log(event)
+          event.streams[0].onaddtrack = function(a){
+              console.log("creating track")
+
+              // Create video element
+              var el = document.getElementById("videoOut")
+              el.srcObject = a.target
+              el.autoplay = true
+              el.controls = true
+              el.muted = true
+              el.width = 320;
+              el.height = 240;
+              //document.getElementById("output").appendChild(el)
+              <!-- pipButtonElement.addEventListener('click', async function() { -->
+              <!--   pipButtonElement.disabled = true; -->
+              <!--   if (el !== document.pictureInPictureElement) { -->
+              <!--     await el.requestPictureInPicture(); -->
+              <!--   } else { -->
+              <!--     await document.exitPictureInPicture(); -->
+              <!--   } -->
+              <!--   pipButtonElement.disabled = false; -->
+              <!-- }); -->
+          }
+        }
+        socket = new WebSocket('ws://localhost:8000/channel');
+
+        socket.onopen = async () => {
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+                video: true
+            });
+            console.log("md::getUserMedia sucess")
+            console.log(stream);
+            //Play it
+            addVideoForStream(stream,true);
+
+            //pc.addTransceiver("audio",{direction:"recvonly"});
+            //pc.addTransceiver("video",{direction:"sendonly"}).sender.replaceTrack(stream.getVideoTracks()[0]);
+            //pc.addTransceiver("audio",{direction:"recvonly"});
+            //pc.addStream(stream);
+            //Create new offer
+            pc.addTransceiver(stream.getAudioTracks()[0],stream);
+            pc.addTransceiver(stream.getVideoTracks()[0],stream);
+            //pc.addTransceiver("video",{direction:"recvonly"});
+            //pc.addTransceiver("video",{direction:"recvonly"});
+
+            const offer = await pc.createOffer(
+                { offerToReceiveAudio: false,
+                offerToReceiveVideo: true }
+            );
+
+            //Create  offer
+            //const offer = await pc.createOffer();
+            //Set it
+            await pc.setLocalDescription(offer);
+            console.log("offer ==== ",offer.sdp);
+            socket.send(JSON.stringify({
+                cmd: 'offer',
+                sdp: offer.sdp
+            }));
+        };
+
+        socket.onmessage  = async (event) =>{
+            var data = JSON.parse(event.data);
+            console.log(data);
+
+            if (data.sdp) {
+                //Create answer
+                const answer = new RTCSessionDescription({
+                    type :'answer',
+                    sdp : data.sdp
+                }); 
+                console.debug(answer.sdp);
+                await pc.setRemoteDescription(answer);
+            }
+
+            document.getElementById("playhlsbutton").style.visibility = "visible";
+        };
+    }
+
+</script>
+
+</head>
+<body>
+	<h1>MediaServer WebRTC to HLS demo</h1>
+    <button onClick="connect()">Go!</button>
+
+	<section class="container" style="display:flex" id="conference">
+        <figure class="draggable" draggable="true">
+            <video id="videoIn"></video>
+            <figcaption>Input</figcaption>
+        </figure>
+        <figure class="draggable" draggable="true">
+            <video id="videoOut"></video>
+            <figcaption>Direct Response - Transmit H.264 over WebRTC to server and return to client</figcaption>
+        </figure>
+        <figure class="draggable" draggable="true">
+            <video id="videoHLS"></video>
+            <figcaption>
+                HLS - Designed to distribute feeds to large audience. Inherent latency ~5-15s minimum.
+                <button id="playhlsbutton" onclick="playHLS();" style="visibility: hidden;">Play HLS</button>
+            </figcaption>
+        </figure>
+    </section>
+
+	</div>
+</body>
+<script src="drag.js"></script>
+
+
+</html>

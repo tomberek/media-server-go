@@ -10,13 +10,12 @@ import (
 
 // MediaStreamDuplicater we can make a copy of the incoming stream and callback the mediaframe data
 type MediaFrameMultiplexer struct {
-	track      *IncomingStreamTrack
+	track       *IncomingStreamTrack
 	multiplexer native.MediaFrameMultiplexer
-	listener   mediaframeListener // used for native wrapper, see swig's doc
+	listener    mediaframeListener // used for native wrapper, see swig's doc
 
 	mediaframeListener func([]byte, uint) // used for outside
 }
-
 
 type mediaframeListener interface {
 	native.MediaFrameListener
@@ -32,7 +31,7 @@ func (m *goMediaFrameListener) deleteMediaFrameListener() {
 }
 
 type overwrittenMediaFrameListener struct {
-	p          native.MediaFrameListener
+	p           native.MediaFrameListener
 	multiplexer *MediaFrameMultiplexer
 }
 
